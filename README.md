@@ -1,4 +1,4 @@
-A mod that creates Ancient Configs (partially ripped from Cany' Act Forcer) for ALL ancients (included modded) that allows you to enable/disable them and add in weights. It also conveniently separates Multi-Act Ancients (in case you really hate Darv Act 3).
+A mod that creates Ancient Configs (partially ripped from Cany' Act Toggler) for ALL ancients (included modded) that allows you to enable/disable them and add in weights. It also conveniently separates Multi-Act Ancients (in case you really hate Darv Act 3).
 
 Features:
 - KILL VAKUU
