@@ -125,7 +125,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
     {
         var title = ancient.Title.GetFormattedText();
         if (IsMultiact(ancient) && GetAncientsForSlot(slot).Contains(ancient))
-            title += " " + new LocString("settings_ui", "ANCIENTCONFIGSPLUS-ACT"+slot+"_HEADER.title").GetFormattedText();
+            title += " [" + new LocString("settings_ui", "ANCIENTCONFIGSPLUS-ACT"+slot+"_HEADER.title").GetFormattedText() +"]";
         if (ancient is CustomAncientModel)
         {
             var actAssembly = ancient.GetType().Assembly;
