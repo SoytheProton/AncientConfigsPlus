@@ -5,6 +5,7 @@ using BaseLib.Config.UI;
 using Godot;
 using MegaCrit.Sts2.addons.mega_text;
 using MegaCrit.Sts2.Core.Localization;
+using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Acts;
@@ -56,6 +57,25 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                 result[parts[0]] = 1;
         }
         return result;
+    }
+
+    private static Dictionary<string, decimal> ManFuckTheseWeights(Dictionary<string, decimal> weights)
+    {
+        var total = weights.Values.Sum();
+
+        var normalized = weights.ToDictionary(
+            kv => kv.Key,
+            kv => Math.Round(kv.Value / total * 100m, 1)
+        );
+        
+        var drift = 100m - normalized.Values.Sum();
+        
+        if (Math.Abs(drift) > 0.001m)
+        {
+            var largest = normalized.MaxBy(kv => kv.Value).Key;
+            normalized[largest] += drift;
+        }
+        return normalized;
     }
 
     private static void SaveWeights(int slot, Dictionary<string, decimal> weights)
@@ -184,7 +204,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             if (!weights.Values.Any(w => w > 0))
                 weights = GetDefaultWeights(slot);
             
-            SaveWeights(slot, weights);
+            SaveWeights(slot, ManFuckTheseWeights(weights));
 
             // ── Basic tab ──
             basicContent.AddChild(CreateSectionHeader($"Act{slot}Header", slot == 1));
@@ -272,7 +292,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                     if (total != 100 && enabled.Count > 0)
                         current[enabled[0]] += 100 - total;
 
-                    SaveWeights(currentSlot, current);
+                    SaveWeights(currentSlot, ManFuckTheseWeights(current));
                     Changed();
                     SaveDebounced();
                 };
@@ -333,7 +353,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                 foreach (var (actName, slider, _) in advancedControls)
                 {
                     var w = current.GetValueOrDefault(actName, 0);
-                    slider.Value = decimal.ToDouble(totalW > 0 ? w * 100 / totalW : 0m);
+                    slider.Value = decimal.ToDouble(totalW > 0m ? w * 100m / totalW : 0m);
                 }
                 RefreshAdvancedLabels();
                 suppressAdvanced = false;
@@ -363,17 +383,19 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                             s.Value = remaining / others.Count;
                     }
 
-                    var currentTotal = advancedControls.Sum(c => (decimal)c.slider.Value);
+                    var currentTotal = advancedControls.Sum(c => c.slider.Value);
                     if (currentTotal != 100 && others.Count > 0)
                     {
-                        var drift = 100m - advancedControls.Sum(c => (decimal)c.slider.Value);
-                        if (Math.Abs(drift) > 0.001m)
+                        var drift = 100 - advancedControls.Sum(c => c.slider.Value);
+                        if (Math.Abs(drift) > 0.001)
                         {
-                            var total = others.Sum(c => (decimal)c.slider.Value);
-                            foreach (var (_, s, _) in others)
+                            var tempCurrent = new Dictionary<string, decimal>();
+                            foreach (var (name, s, _) in advancedControls)
+                                tempCurrent[name] = (decimal) s.Value;
+                            tempCurrent = ManFuckTheseWeights(tempCurrent);
+                            foreach (var (name, s, _) in others)
                             {
-                                if (total > 0)
-                                    s.Value += decimal.ToDouble(drift * ((decimal)s.Value / total));
+                                s.Value = decimal.ToDouble(tempCurrent[name]);
                             }
                         }
                     }
@@ -382,7 +404,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                     var current = new Dictionary<string, decimal>();
                     foreach (var (name, s, _) in advancedControls)
                         current[name] = (decimal) s.Value;
-                    SaveWeights(currentSlot, current);
+                    SaveWeights(currentSlot, ManFuckTheseWeights(current));
 
                     RefreshAdvancedLabels();
                     suppressAdvanced = false;
@@ -449,7 +471,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
     private void RestoreDefaultsNoConfirmSpecial(List<Action>  refreshBasicActions, List<Action> refreshAdvancedActions)
     {
         for (int slot = 1; slot <= 3; slot++)
-            SaveWeights(slot, GetDefaultWeights(slot));
+            SaveWeights(slot, ManFuckTheseWeights(GetDefaultWeights(slot)));
         foreach (var refresh in refreshBasicActions) refresh();
         foreach (var refresh in refreshAdvancedActions) refresh();
         Save();

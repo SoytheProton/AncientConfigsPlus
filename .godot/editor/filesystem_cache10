@@ -1,6 +1,6 @@
 63f7b34db8d8cdea90c76aacccf841ec
-::res://::1781751740
-AncientConfigsPlus.json::JSON::-1::1781751724::0::1::::<><><>0<>0<><>::
+::res://::1781808560
+AncientConfigsPlus.json::JSON::-1::1781808560::0::1::::<><><>0<>0<><>::
 export_presets.cfg::TextFile::-1::1781661286::0::1::::<><><>0<>0<><>::
 README.md::TextFile::-1::1781751740::0::1::::<><><>0<>0<><>::
 ::res://AncientConfigsPlus/::1781661607
@@ -8,12 +8,12 @@ mod_image.png::CompressedTexture2D::6766244660054354887::1781661286::1781661556:
 ::res://AncientConfigsPlus/localization/::1781661607
 ::res://AncientConfigsPlus/localization/eng/::1781745558
 settings_ui.json::JSON::-1::1781745558::0::1::::<><><>0<>0<><>::
-::res://AncientConfigsPlusCode/::1781750440
-AncientConfigsPlusConfig.cs::CSharpScript::4763164559159289726::1781750440::0::1::::<><><>0<>0<><>::
+::res://AncientConfigsPlusCode/::1781800330
+AncientConfigsPlusConfig.cs::CSharpScript::4763164559159289726::1781800330::0::1::::<><><>0<>0<><>::
 AncientOverridePatch.cs::CSharpScript::4497820888484504659::1781750213::0::1::::<><><>0<>0<><>::
 MainFile.cs::CSharpScript::5233983428787957797::1781661531::0::1::::<><><>0<>0<><>::
 ::res://bin/::1781661553
 ::res://bin/ExportRelease/::1781661553
 ::res://bin/ExportRelease/net9.0/::1781661553
-::res://bin/ExportRelease/net9.0/publish/::1781751799
+::res://bin/ExportRelease/net9.0/publish/::1781807567
 AncientConfigsPlus.deps.json::JSON::-1::1781748174::0::1::::<><><>0<>0<><>::
