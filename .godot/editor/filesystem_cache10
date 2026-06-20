@@ -8,12 +8,12 @@ mod_image.png::CompressedTexture2D::6766244660054354887::1781661286::1781661556:
 ::res://AncientConfigsPlus/localization/::1781661607
 ::res://AncientConfigsPlus/localization/eng/::1781745558
 settings_ui.json::JSON::-1::1781745558::0::1::::<><><>0<>0<><>::
-::res://AncientConfigsPlusCode/::1781946809
+::res://AncientConfigsPlusCode/::1781987456
 AncientConfigsPlusConfig.cs::CSharpScript::4763164559159289726::1781946809::0::1::::<><><>0<>0<><>::
-AncientOverridePatch.cs::CSharpScript::4497820888484504659::1781750213::0::1::::<><><>0<>0<><>::
+AncientOverridePatch.cs::CSharpScript::4497820888484504659::1781987456::0::1::::<><><>0<>0<><>::
 MainFile.cs::CSharpScript::5233983428787957797::1781661531::0::1::::<><><>0<>0<><>::
 ::res://bin/::1781661553
 ::res://bin/ExportRelease/::1781661553
 ::res://bin/ExportRelease/net9.0/::1781661553
-::res://bin/ExportRelease/net9.0/publish/::1781946815
+::res://bin/ExportRelease/net9.0/publish/::1781987479
 AncientConfigsPlus.deps.json::JSON::-1::1781944487::0::1::::<><><>0<>0<><>::

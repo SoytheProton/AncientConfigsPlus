@@ -13,7 +13,8 @@ public class AncientOverridePatch
         ActModel __instance, 
         Rng rng)
     { 
-        __instance._rooms.Ancient = AncientConfigsPlusConfig.GetWeightedAncient(__instance.ActNumber(), rng);
+        if(__instance.ActNumber() <= 3)
+            __instance._rooms.Ancient = AncientConfigsPlusConfig.GetWeightedAncient(__instance.ActNumber(), rng);
     }
 }
 
