@@ -1,11 +1,13 @@
 ﻿using System.Reflection;
+using System.Text.RegularExpressions;
 using BaseLib.Abstracts;
 using BaseLib.Config;
 using BaseLib.Config.UI;
+using BaseLib.Extensions;
 using Godot;
 using MegaCrit.Sts2.addons.mega_text;
 using MegaCrit.Sts2.Core.Localization;
-using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Localization.Fonts;
 using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Acts;
@@ -34,24 +36,16 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         { 3, typeof(AncientConfigsPlusConfig).GetProperty(nameof(EnabledAct3))! },
     };
     
-    private Dictionary<string, decimal> GetDefaultWeights(int slot)
-    {
-        var ancients = GetAncientsForSlot(slot);
-        var count = ancients.Count;
-        if (count == 0) return new Dictionary<string, decimal>();
+    private Dictionary<string, int> GetDefaultWeights(int slot) => GetAncientsForSlot(slot).ToDictionary(a => a.GetType().Name, _ => 1);
 
-        var equalWeight = 100m / count;
-        return ancients.ToDictionary(a => a.GetType().Name, _ => equalWeight);
-    }
-
-    private static Dictionary<string, decimal> ParseWeights(int slot)
+    private static Dictionary<string, int> ParseWeights(int slot)
     {
         var raw = (string)SlotProps[slot].GetValue(null)!;
-        var result = new Dictionary<string, decimal>();
+        var result = new Dictionary<string, int>();
         foreach (var entry in raw.Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = entry.Split(':');
-            if (parts.Length == 2 && decimal.TryParse(parts[1], out var weight))
+            if (parts.Length == 2 && int.TryParse(parts[1], out var weight))
                 result[parts[0]] = Math.Clamp(weight, 0, 100);
             else if (parts.Length == 1)
                 result[parts[0]] = 1;
@@ -59,28 +53,14 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         return result;
     }
 
-    private static Dictionary<string, decimal> ManFuckTheseWeights(Dictionary<string, decimal> weights)
+    private static void SaveWeights(int slot, Dictionary<string, int> weights)
     {
-        var total = weights.Values.Sum();
-
-        var normalized = weights.ToDictionary(
-            kv => kv.Key,
-            kv => Math.Round(kv.Value / total * 100m, 1)
-        );
-        
-        var drift = 100m - normalized.Values.Sum();
-        
-        if (Math.Abs(drift) > 0.001m)
+        var dict = ParseWeights(slot);
+        foreach (var kv in weights)
         {
-            var largest = normalized.MaxBy(kv => kv.Value).Key;
-            normalized[largest] += drift;
+            dict[kv.Key] = kv.Value;
         }
-        return normalized;
-    }
-
-    private static void SaveWeights(int slot, Dictionary<string, decimal> weights)
-    {
-        var entries = weights.Select(kv => $"{kv.Key}:{kv.Value}");
+        var entries = dict.Select(kv => $"{kv.Key}:{kv.Value}");
         SlotProps[slot].SetValue(null, string.Join(",", entries));
     }
 
@@ -130,8 +110,8 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             return all[rng.NextInt(all.Count)];
 
         var totalWeight = weighted.Sum(x => x.weight);
-        var roll = (decimal) rng.NextFloat((float)totalWeight);
-        var cumulative = 0m;
+        var roll = rng.NextInt(totalWeight);
+        var cumulative = 0;
         foreach (var (act, weight) in weighted)
         {
             cumulative += weight;
@@ -141,7 +121,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         return weighted.Last().act;
     }
 
-    private static string GetActDisplayName(AncientEventModel ancient, int slot)
+    private static string GetAncientDisplayName(AncientEventModel ancient, int slot)
     {
         var title = ancient.Title.GetFormattedText();
         if (IsMultiact(ancient) && GetAncientsForSlot(slot).Contains(ancient))
@@ -192,30 +172,30 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         for (int slot = 1; slot <= 3; slot++)
         {
             var currentSlot = slot;
-            var acts = GetAncientsForSlot(slot);
-            if (acts.Count == 0) continue;
+            var ancients = GetAncientsForSlot(slot);
+            if (ancients.Count == 0) continue;
 
             var weights = ParseWeights(slot);
-            var actNames = acts.Select(a => a.GetType().Name).ToHashSet();
+            var ancientNames = ancients.Select(a => a.GetType().Name).ToHashSet();
 
-            foreach (var key in weights.Keys.Where(k => !actNames.Contains(k)).ToList())
+            foreach (var key in weights.Keys.Where(k => !ancientNames.Contains(k)).ToList())
                 weights.Remove(key);
 
             if (!weights.Values.Any(w => w > 0))
                 weights = GetDefaultWeights(slot);
             
-            SaveWeights(slot, ManFuckTheseWeights(weights));
+            SaveWeights(slot, weights);
 
             // ── Basic tab ──
             basicContent.AddChild(CreateSectionHeader($"Act{slot}Header", slot == 1));
 
-            var basicControls = new List<(string actName, NTickbox tickbox)>();
+            var basicControls = new List<(string ancientName, NTickbox tickbox)>();
             bool suppressBasic = false;
 
-            foreach (var act in acts)
+            foreach (var act in ancients)
             {
-                var actName = act.GetType().Name;
-                var displayName = GetActDisplayName(act, slot);
+                var ancientName = act.GetType().Name;
+                var displayName = GetAncientDisplayName(act, slot);
 
                 var label = CreateRawLabelControl(displayName, 28);
                 label.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -231,7 +211,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                 tickbox.AddChild(tickboxVisuals);
                 tickboxVisuals.Owner = tickbox;
 
-                basicControls.Add((actName, tickbox));
+                basicControls.Add((ancientName, tickbox));
 
                 var hbox = new HBoxContainer();
                 hbox.AddThemeConstantOverride("separation", 10);
@@ -246,18 +226,18 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             {
                 suppressBasic = true;
                 var current = ParseWeights(currentSlot);
-                foreach (var (actName, tickbox) in basicControls)
-                    tickbox.IsTicked = current.GetValueOrDefault(actName, 0) > 0;
+                foreach (var (ancientName, tickbox) in basicControls)
+                    tickbox.IsTicked = current.GetValueOrDefault(ancientName, 0) > 0;
                 suppressBasic = false;
             }
             refreshBasicActions.Add(RefreshBasic);
             Callable.From(RefreshBasic).CallDeferred();
 
             // Basic toggle handlers
-            foreach (var (actName, tickbox) in basicControls)
+            foreach (var (ancientName, tickbox) in basicControls)
             {
-                var capturedName = actName;
-                tickbox.Toggled += (NTickbox tb) =>
+                var capturedName = ancientName;
+                tickbox.Toggled += tb =>
                 {
                     if (suppressBasic) return;
                     var current = ParseWeights(currentSlot);
@@ -269,7 +249,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                     else
                     {
                         var enabledCount = current.Count(kv =>
-                            actNames.Contains(kv.Key) && kv.Value > 0);
+                            ancientNames.Contains(kv.Key) && kv.Value > 0);
                         if (enabledCount > 1)
                         {
                             current[capturedName] = 0;
@@ -282,17 +262,8 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                             return;
                         }
                     }
-
-                    // Equalize weights for enabled acts
-                    var enabled = current.Where(kv => kv.Value > 0).Select(kv => kv.Key).ToList();
-                    var equalWeight = 100m / enabled.Count;
-                    foreach (var key in current.Keys.ToList())
-                        current[key] = enabled.Contains(key) ? equalWeight : 0;
-                    var total = current.Values.Sum();
-                    if (total != 100 && enabled.Count > 0)
-                        current[enabled[0]] += 100 - total;
-
-                    SaveWeights(currentSlot, ManFuckTheseWeights(current));
+                    
+                    SaveWeights(currentSlot, current);
                     Changed();
                     SaveDebounced();
                 };
@@ -303,45 +274,46 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             // ── Advanced tab ──
             advancedContent.AddChild(CreateSectionHeader($"Act{slot}Header", slot == 1));
 
-            var advancedControls = new List<(string actName, HSlider slider, MegaRichTextLabel percentLabel)>();
+            var advancedControls = new List<(string ancientName, HSlider slider, LineEdit lineEdit)>();
             bool suppressAdvanced = false;
 
-            foreach (var act in acts)
+            foreach (var ancient in ancients)
             {
-                var actName = act.GetType().Name;
-                var displayName = GetActDisplayName(act, slot);
+                var ancientName = ancient.GetType().Name;
+                var displayName = GetAncientDisplayName(ancient, slot);
 
                 var nameLabel = CreateRawLabelControl(displayName, 28);
                 nameLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
 
-                var percentLabel = CreateRawLabelControl("", 28);
-                percentLabel.CustomMinimumSize = new Vector2(96f, 0f);
-                percentLabel.HorizontalAlignment = HorizontalAlignment.Right;
+                var weightLabel = new LineEdit();
+                weightLabel.CustomMinimumSize = new Vector2(32f, 0f);
+                weightLabel.Alignment = HorizontalAlignment.Right;
+                weightLabel.AddThemeFontOverride(ThemeConstants.LineEdit.Font, GD.Load<FontFile>("res://fonts/kreon_regular.ttf"));
+                weightLabel.AddThemeFontSizeOverrideAll(28);
 
                 var slider = new HSlider();
                 slider.MinValue = 0;
-                slider.MaxValue = 100;
-                slider.Step = 0.1f;
+                slider.MaxValue = 50;
+                slider.Step = 1;
                 slider.CustomMinimumSize = new Vector2(200f, 32f);
                 slider.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
                 slider.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
 
-                advancedControls.Add((actName, slider, percentLabel));
+                advancedControls.Add((ancientName, slider, weightLabel));
 
                 var hbox = new HBoxContainer();
                 hbox.AddThemeConstantOverride("separation", 10);
                 hbox.CustomMinimumSize = new Vector2(0f, 64f);
                 hbox.AddChild(nameLabel);
                 hbox.AddChild(slider);
-                hbox.AddChild(percentLabel);
+                hbox.AddChild(weightLabel);
                 advancedContent.AddChild(hbox);
             }
 
             void RefreshAdvancedLabels()
             {
-                var total = advancedControls.Sum(c => c.slider.Value);
                 foreach (var (_, s, label) in advancedControls)
-                    label.Text = total > 0 ? $"{s.Value * 100f / total:F1}%" : "0%";
+                    label.Text = $"{(int) s.Value}";
             }
 
             // Advanced refresh from saved weights
@@ -349,11 +321,9 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             {
                 suppressAdvanced = true;
                 var current = ParseWeights(currentSlot);
-                var totalW = current.Values.Sum();
-                foreach (var (actName, slider, _) in advancedControls)
+                foreach (var (ancientName, slider, _) in advancedControls)
                 {
-                    var w = current.GetValueOrDefault(actName, 0);
-                    slider.Value = decimal.ToDouble(totalW > 0m ? w * 100m / totalW : 0m);
+                    slider.Value = current.GetValueOrDefault(ancientName, 0);
                 }
                 RefreshAdvancedLabels();
                 suppressAdvanced = false;
@@ -362,54 +332,77 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             Callable.From(RefreshAdvanced).CallDeferred();
 
             // Advanced slider handlers
-            foreach (var (actName, slider, _) in advancedControls)
+            foreach (var (name, slider, lineEdit) in advancedControls)
             {
-                var capturedName = actName;
-                slider.ValueChanged += (double val) =>
+                slider.ValueChanged += dub =>
                 {
                     if (suppressAdvanced) return;
                     suppressAdvanced = true;
-
-                    var newVal = val;
-                    var others = advancedControls.Where(c => c.actName != capturedName).ToList();
-                    var otherTotal = others.Sum(c => c.slider.Value);
-                    var remaining = 100 - newVal;
-
-                    foreach (var (_, s, _) in others)
+                    
+                    var current = new Dictionary<string, int>();
+                    current[name] = (int) slider.Value;
+                    
+                    if(dub == 0)
                     {
-                        if (otherTotal > 0)
-                            s.Value = s.Value / otherTotal * remaining;
-                        else if (others.Count > 0)
-                            s.Value = remaining / others.Count;
-                    }
-
-                    var currentTotal = advancedControls.Sum(c => c.slider.Value);
-                    if (currentTotal != 100 && others.Count > 0)
-                    {
-                        var drift = 100 - advancedControls.Sum(c => c.slider.Value);
-                        if (Math.Abs(drift) > 0.001)
+                        var enabledCount = current.Count(kv =>
+                            ancientNames.Contains(kv.Key) && kv.Value > 0);
+                        if (enabledCount == 0)
                         {
-                            var tempCurrent = new Dictionary<string, decimal>();
-                            foreach (var (name, s, _) in advancedControls)
-                                tempCurrent[name] = (decimal) s.Value;
-                            tempCurrent = ManFuckTheseWeights(tempCurrent);
-                            foreach (var (name, s, _) in others)
-                            {
-                                s.Value = decimal.ToDouble(tempCurrent[name]);
-                            }
+                            suppressAdvanced = true;
+                            slider.Value = current[name] = 1;
+                            lineEdit.Text = slider.Value.ToString();
+                            suppressAdvanced = false;
                         }
                     }
-
-                    // Save as weights
-                    var current = new Dictionary<string, decimal>();
-                    foreach (var (name, s, _) in advancedControls)
-                        current[name] = (decimal) s.Value;
-                    SaveWeights(currentSlot, ManFuckTheseWeights(current));
+                    
+                    SaveWeights(currentSlot, current);
 
                     RefreshAdvancedLabels();
                     suppressAdvanced = false;
                     Changed();
                     SaveDebounced();
+                };
+
+                Regex regex = new Regex("[^0-9]");
+                
+                lineEdit.TextChanged += newText =>
+                {
+                    if (regex.IsMatch(newText) || newText == "")
+                    {
+                        int caretPos = lineEdit.CaretColumn;
+                        lineEdit.Text = regex.Replace(lineEdit.Text, "");
+                        if (lineEdit.Text == "") lineEdit.Text = "0";
+                        lineEdit.CaretColumn = caretPos - (newText.Length - lineEdit.Text.Length);
+                    }
+                    else
+                    {
+                        if (suppressAdvanced) return;
+                        suppressAdvanced = true;
+                    
+                        var current = new Dictionary<string, int>();
+                        var sliderValue = slider.Value != 0 ? slider.Value : 1;
+                        slider.Value = current[name] = int.Parse(lineEdit.Text);
+                        
+                        if(int.Parse(newText) == 0)
+                        {
+                            var enabledCount = current.Count(kv =>
+                                ancientNames.Contains(kv.Key) && kv.Value > 0);
+                            if (enabledCount == 0)
+                            {
+                                suppressAdvanced = true;
+                                lineEdit.Text = sliderValue.ToString();
+                                slider.Value = current[name] = (int) sliderValue;
+                                suppressAdvanced = false;
+                            }
+                        }
+                        
+                        SaveWeights(currentSlot, current);
+
+                        RefreshAdvancedLabels();
+                        suppressAdvanced = false;
+                        Changed();
+                        SaveDebounced();
+                    }
                 };
             }
 
@@ -471,7 +464,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
     private void RestoreDefaultsNoConfirmSpecial(List<Action>  refreshBasicActions, List<Action> refreshAdvancedActions)
     {
         for (int slot = 1; slot <= 3; slot++)
-            SaveWeights(slot, ManFuckTheseWeights(GetDefaultWeights(slot)));
+            SaveWeights(slot, GetDefaultWeights(slot));
         foreach (var refresh in refreshBasicActions) refresh();
         foreach (var refresh in refreshAdvancedActions) refresh();
         Save();
