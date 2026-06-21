@@ -5,6 +5,7 @@ using BaseLib.Config;
 using BaseLib.Config.UI;
 using BaseLib.Extensions;
 using Godot;
+using GodotPlugins.Game;
 using MegaCrit.Sts2.addons.mega_text;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Localization.Fonts;
@@ -55,12 +56,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
 
     private static void SaveWeights(int slot, Dictionary<string, int> weights)
     {
-        var dict = ParseWeights(slot);
-        foreach (var kv in weights)
-        {
-            dict[kv.Key] = kv.Value;
-        }
-        var entries = dict.Select(kv => $"{kv.Key}:{kv.Value}");
+        var entries = weights.Select(kv => $"{kv.Key}:{kv.Value}");
         SlotProps[slot].SetValue(null, string.Join(",", entries));
     }
 
@@ -330,8 +326,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             }
             refreshAdvancedActions.Add(RefreshAdvanced);
             Callable.From(RefreshAdvanced).CallDeferred();
-
-            // Advanced slider handlers
+            
             foreach (var (name, slider, lineEdit) in advancedControls)
             {
                 slider.ValueChanged += dub =>
@@ -340,7 +335,8 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                     suppressAdvanced = true;
                     
                     var current = new Dictionary<string, int>();
-                    current[name] = (int) slider.Value;
+                    foreach (var (n, s, _) in advancedControls)
+                        current[n] = (int) s.Value;
                     
                     if(dub == 0)
                     {
@@ -367,23 +363,38 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                 
                 lineEdit.TextChanged += newText =>
                 {
-                    if (regex.IsMatch(newText) || newText == "")
+                    if (suppressAdvanced) return;
+                    suppressAdvanced = true;
+                    
+                    if (regex.IsMatch(newText))
                     {
                         int caretPos = lineEdit.CaretColumn;
                         lineEdit.Text = regex.Replace(lineEdit.Text, "");
-                        if (lineEdit.Text == "") lineEdit.Text = "0";
                         lineEdit.CaretColumn = caretPos - (newText.Length - lineEdit.Text.Length);
+                        suppressAdvanced = false;
                     }
                     else
                     {
-                        if (suppressAdvanced) return;
-                        suppressAdvanced = true;
-                    
+                        if (string.IsNullOrWhiteSpace(lineEdit.Text) || string.IsNullOrWhiteSpace(newText))
+                        {
+                            int caretPos = lineEdit.CaretColumn;
+                            lineEdit.Text = "0";
+                            lineEdit.CaretColumn = caretPos - (newText.Length - lineEdit.Text.Length);
+                        }
+
+                        if (!int.TryParse(lineEdit.Text, out var parsedInt))
+                        {
+                            suppressAdvanced = false;
+                            return;
+                        }
+
                         var current = new Dictionary<string, int>();
                         var sliderValue = slider.Value != 0 ? slider.Value : 1;
-                        slider.Value = current[name] = int.Parse(lineEdit.Text);
+                        foreach (var (n, s, _) in advancedControls)
+                            current[n] = (int) s.Value;
+                        slider.Value = current[name] = parsedInt;
                         
-                        if(int.Parse(newText) == 0)
+                        if(parsedInt == 0)
                         {
                             var enabledCount = current.Count(kv =>
                                 ancientNames.Contains(kv.Key) && kv.Value > 0);

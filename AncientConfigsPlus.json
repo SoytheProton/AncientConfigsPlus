@@ -3,7 +3,7 @@
   "name": "Ancient Configs Plus",
   "author": "SoytheProton",
   "description": "A config mod for all your Ancient needs.",
-  "version": "v1.1.1",
+  "version": "v1.1.2",
   "has_pck": true,
   "has_dll": true,
   "dependencies": [{"id": "BaseLib", "min_version": "3.3.0"}],
