@@ -5,10 +5,8 @@ using BaseLib.Config;
 using BaseLib.Config.UI;
 using BaseLib.Extensions;
 using Godot;
-using GodotPlugins.Game;
 using MegaCrit.Sts2.addons.mega_text;
 using MegaCrit.Sts2.Core.Localization;
-using MegaCrit.Sts2.Core.Localization.Fonts;
 using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Acts;
@@ -36,6 +34,41 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         { 2, typeof(AncientConfigsPlusConfig).GetProperty(nameof(EnabledAct2))! },
         { 3, typeof(AncientConfigsPlusConfig).GetProperty(nameof(EnabledAct3))! },
     };
+
+    // nightmare code trying to determine some bs...
+    private int IsOnlyAncient(Dictionary<string, int> current, HashSet<String> ancientNames, int slot, String trackedAncient)
+    {
+        int enabledCount = 0;
+        List<String> multiact = [];
+        foreach (var kv in current.Where(kv => ancientNames.Contains(kv.Key)))
+        {
+            if (kv.Value <= 0) continue;
+            if (kv.Key != trackedAncient && IsMultiact(GetAncientFromName(kv.Key)!))
+                multiact.Add(kv.Key);
+            enabledCount++;
+        }
+
+        if (multiact.Count > 0)
+        {
+            MainFile.Logger.Info(multiact.Count + " multiact ancients detected");
+            for (int i = 1; i <= 3; i++)
+            {
+                if (i == slot) continue;
+                var dict = ParseWeights(i);
+                if (dict.Count(kv => kv.Value > 0) > 1) continue;
+                var ancient = dict.FirstOrDefault(kv => kv.Value > 0).Key;
+                if (multiact.Contains(ancient))
+                { 
+                    enabledCount--;
+                    multiact.Remove(ancient);
+                }
+            }
+        }
+        MainFile.Logger.Info(enabledCount + " ancients enabled");
+        return enabledCount;
+    }
+    
+    private AncientEventModel? GetAncientFromName(string name) => ModelDb.AllAncients.FirstOrDefault(a => a.GetType().Name == name);
     
     private Dictionary<string, int> GetDefaultWeights(int slot) => GetAncientsForSlot(slot).ToDictionary(a => a.GetType().Name, _ => 1);
 
@@ -90,16 +123,16 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         return retVal;
     }
 
-    private static bool IsMultiact(AncientEventModel ancient) => (GetAncientsForSlot(1).Contains(ancient) ? 1 : 0) + (GetAncientsForSlot(2).Contains(ancient) ? 1 : 0) + (GetAncientsForSlot(3).Contains(ancient) ? 1 : 0) >= 2;
+    internal static bool IsMultiact(AncientEventModel ancient) => (GetAncientsForSlot(1).Contains(ancient) ? 1 : 0) + (GetAncientsForSlot(2).Contains(ancient) ? 1 : 0) + (GetAncientsForSlot(3).Contains(ancient) ? 1 : 0) >= 2;
 
-    public static AncientEventModel GetWeightedAncient(int slot, Rng rng)
+    public static AncientEventModel GetWeightedAncient(int slot, Rng rng, List<AncientEventModel> rolledAncients)
     {
         var all = GetAncientsForSlot(slot);
         var weights = ParseWeights(slot);
 
         var weighted = all
-            .Select(a => (act: a, weight: weights.GetValueOrDefault(a.GetType().Name, 0)))
-            .Where(x => x.weight > 0)
+            .Select(a => (ancient: a, weight: weights.GetValueOrDefault(a.GetType().Name, 0)))
+            .Where(x => x.weight > 0 && !rolledAncients.Contains(x.ancient))
             .ToList();
 
         if (weighted.Count == 0)
@@ -114,7 +147,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             if (roll < cumulative)
                 return act;
         }
-        return weighted.Last().act;
+        return weighted.Last().ancient;
     }
 
     private static string GetAncientDisplayName(AncientEventModel ancient, int slot)
@@ -188,10 +221,10 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             var basicControls = new List<(string ancientName, NTickbox tickbox)>();
             bool suppressBasic = false;
 
-            foreach (var act in ancients)
+            foreach (var ancient in ancients)
             {
-                var ancientName = act.GetType().Name;
-                var displayName = GetAncientDisplayName(act, slot);
+                var ancientName = ancient.GetType().Name;
+                var displayName = GetAncientDisplayName(ancient, slot);
 
                 var label = CreateRawLabelControl(displayName, 28);
                 label.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -233,6 +266,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             foreach (var (ancientName, tickbox) in basicControls)
             {
                 var capturedName = ancientName;
+                var slot1 = slot;
                 tickbox.Toggled += tb =>
                 {
                     if (suppressBasic) return;
@@ -244,9 +278,8 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                     }
                     else
                     {
-                        var enabledCount = current.Count(kv =>
-                            ancientNames.Contains(kv.Key) && kv.Value > 0);
-                        if (enabledCount > 1)
+
+                        if (IsOnlyAncient(current, ancientNames, slot1, capturedName) > 1)
                         {
                             current[capturedName] = 0;
                         }
@@ -329,6 +362,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             
             foreach (var (name, slider, lineEdit) in advancedControls)
             {
+                var slot1 = slot;
                 slider.ValueChanged += dub =>
                 {
                     if (suppressAdvanced) return;
@@ -340,9 +374,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                     
                     if(dub == 0)
                     {
-                        var enabledCount = current.Count(kv =>
-                            ancientNames.Contains(kv.Key) && kv.Value > 0);
-                        if (enabledCount == 0)
+                        if (IsOnlyAncient(current, ancientNames, slot1, name) == 0)
                         {
                             suppressAdvanced = true;
                             slider.Value = current[name] = 1;
@@ -396,9 +428,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                         
                         if(parsedInt == 0)
                         {
-                            var enabledCount = current.Count(kv =>
-                                ancientNames.Contains(kv.Key) && kv.Value > 0);
-                            if (enabledCount == 0)
+                            if (IsOnlyAncient(current, ancientNames, slot1, name) == 0)
                             {
                                 suppressAdvanced = true;
                                 lineEdit.Text = sliderValue.ToString();
