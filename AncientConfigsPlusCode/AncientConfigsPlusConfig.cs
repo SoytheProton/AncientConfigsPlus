@@ -159,7 +159,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         {
             var actAssembly = ancient.GetType().Assembly;
             var mod = ModManager.GetLoadedMods()
-                .FirstOrDefault(m => m.assembly == actAssembly);
+                .FirstOrDefault(m => m.assemblies.Any(mod => mod == actAssembly));
             if (mod?.manifest?.name != null)
                 return $"{title} ({mod.manifest.name})";
         }
@@ -327,6 +327,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                 slider.CustomMinimumSize = new Vector2(200f, 32f);
                 slider.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
                 slider.SizeFlagsVertical = Control.SizeFlags.ShrinkCenter;
+                slider.Scrollable = false;
 
                 advancedControls.Add((ancientName, slider, weightLabel));
 
