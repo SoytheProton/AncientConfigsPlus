@@ -36,10 +36,10 @@ public class AncientConfigsPlusConfig : SimpleModConfig
     };
 
     // nightmare code trying to determine some bs...
-    private int IsOnlyAncient(Dictionary<string, int> current, HashSet<String> ancientNames, int slot, String trackedAncient)
+    private static int IsOnlyAncient(Dictionary<string, int> current, HashSet<string> ancientNames, int slot, string trackedAncient)
     {
-        int enabledCount = 0;
-        List<String> multiact = [];
+        var enabledCount = 0;
+        List<string> multiact = [];
         foreach (var kv in current.Where(kv => ancientNames.Contains(kv.Key)))
         {
             if (kv.Value <= 0) continue;
@@ -50,27 +50,24 @@ public class AncientConfigsPlusConfig : SimpleModConfig
 
         if (multiact.Count > 0)
         {
-            MainFile.Logger.Info(multiact.Count + " multiact ancients detected");
-            for (int i = 1; i <= 3; i++)
+            for (var i = 1; i <= 3; i++)
             {
                 if (i == slot) continue;
                 var dict = ParseWeights(i);
                 if (dict.Count(kv => kv.Value > 0) > 1) continue;
                 var ancient = dict.FirstOrDefault(kv => kv.Value > 0).Key;
-                if (multiact.Contains(ancient))
-                { 
-                    enabledCount--;
-                    multiact.Remove(ancient);
-                }
+                if (!multiact.Contains(ancient)) 
+                    continue;
+                enabledCount--;
+                multiact.Remove(ancient);
             }
         }
-        MainFile.Logger.Info(enabledCount + " ancients enabled");
         return enabledCount;
     }
     
-    private AncientEventModel? GetAncientFromName(string name) => ModelDb.AllAncients.FirstOrDefault(a => a.GetType().Name == name);
+    private static AncientEventModel? GetAncientFromName(string name) => ModelDb.AllAncients.FirstOrDefault(a => a.GetType().Name == name);
     
-    private Dictionary<string, int> GetDefaultWeights(int slot) => GetAncientsForSlot(slot).ToDictionary(a => a.GetType().Name, _ => 1);
+    private static Dictionary<string, int> GetDefaultWeights(int slot) => GetAncientsForSlot(slot).ToDictionary(a => a.GetType().Name, _ => 1);
 
     private static Dictionary<string, int> ParseWeights(int slot)
     {
@@ -119,33 +116,65 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                 break;
         }
 
-        retVal.AddRange(ModelDb.AllAncients.Where(a => a is CustomAncientModel && ((CustomAncientModel)a).IsValidForAct(act)).ToList());
+        retVal.AddRange(ModelDb.AllAncients.Where(a => a is CustomAncientModel model && model.IsValidForAct(act)).ToList());
+
+        foreach (var kv in ExceptionAncientsExtension.ActSpecificAncients.Where(kv => kv.Value.Any(a => ModelDb.GetById<ActModel>(a).ActNumber() == slot)))
+        {
+            retVal.AddRange(ModelDb.GetById<AncientEventModel>(kv.Key));
+        }
+
         return retVal;
     }
 
     internal static bool IsMultiact(AncientEventModel ancient) => (GetAncientsForSlot(1).Contains(ancient) ? 1 : 0) + (GetAncientsForSlot(2).Contains(ancient) ? 1 : 0) + (GetAncientsForSlot(3).Contains(ancient) ? 1 : 0) >= 2;
 
-    public static AncientEventModel GetWeightedAncient(int slot, Rng rng, List<AncientEventModel> rolledAncients)
+    public static AncientEventModel GetWeightedAncient(ActModel actModel, Rng rng, List<AncientEventModel> rolledAncients, bool isOverride)
     {
+        var slot = actModel.ActNumber();
         var all = GetAncientsForSlot(slot);
+        List<AncientEventModel> filteredList = [];
+        if(!isOverride) // Override is just if its rolling an exception or not.
+        {
+            filteredList = all.Where(a => (a is CustomAncientModel model && model.IsValidForAct(actModel)) || a is not CustomAncientModel).ToList(); // Gets all Ancients that are normally able to spawn within the Act.
+        }
+        else
+        {
+            
+            foreach (var kv in ExceptionAncientsExtension.ActSpecificAncients)
+            {
+                filteredList.AddRange(from value in kv.Value where value == actModel.Id select ModelDb.GetById<AncientEventModel>(kv.Key)); // In-case of exception, tries to get all ancients that share the act to weight.
+            }
+        }
+        
         var weights = ParseWeights(slot);
 
-        var weighted = all
+        var weighted = filteredList
             .Select(a => (ancient: a, weight: weights.GetValueOrDefault(a.GetType().Name, 0)))
             .Where(x => x.weight > 0 && !rolledAncients.Contains(x.ancient))
             .ToList();
 
         if (weighted.Count == 0)
+        {
+            if (isOverride) // returns a non-overriding WeightedAncient call to avoid getting other exception ancients when called.
+                return GetWeightedAncient(actModel, rng, rolledAncients, false);
+            
+            // If filtered is empty, since we know this means all non-exception ancients are gone, check through unfiltered list next.
+            weighted = all.Select(a => (ancient: a, weight: weights.GetValueOrDefault(a.GetType().Name, 0)))
+                .Where(x => x.weight > 0 && !rolledAncients.Contains(x.ancient)).ToList();
+        }
+
+        if(weighted.Count == 0)
             return all[rng.NextInt(all.Count)];
+        
 
         var totalWeight = weighted.Sum(x => x.weight);
         var roll = rng.NextInt(totalWeight);
         var cumulative = 0;
-        foreach (var (act, weight) in weighted)
+        foreach (var (ancient, weight) in weighted)
         {
             cumulative += weight;
             if (roll < cumulative)
-                return act;
+                return ancient;
         }
         return weighted.Last().ancient;
     }
@@ -198,7 +227,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         var refreshBasicActions = new List<Action>();
         var refreshAdvancedActions = new List<Action>();
 
-        for (int slot = 1; slot <= 3; slot++)
+        for (var slot = 1; slot <= 3; slot++)
         {
             var currentSlot = slot;
             var ancients = GetAncientsForSlot(slot);
@@ -219,7 +248,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             basicContent.AddChild(CreateSectionHeader($"Act{slot}Header", slot == 1));
 
             var basicControls = new List<(string ancientName, NTickbox tickbox)>();
-            bool suppressBasic = false;
+            var suppressBasic = false;
 
             foreach (var ancient in ancients)
             {
@@ -304,7 +333,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             advancedContent.AddChild(CreateSectionHeader($"Act{slot}Header", slot == 1));
 
             var advancedControls = new List<(string ancientName, HSlider slider, LineEdit lineEdit)>();
-            bool suppressAdvanced = false;
+            var suppressAdvanced = false;
 
             foreach (var ancient in ancients)
             {
@@ -392,7 +421,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                     SaveDebounced();
                 };
 
-                Regex regex = new Regex("[^0-9]");
+                var regex = new Regex("[^0-9]");
                 
                 lineEdit.TextChanged += newText =>
                 {
@@ -401,7 +430,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                     
                     if (regex.IsMatch(newText))
                     {
-                        int caretPos = lineEdit.CaretColumn;
+                        var caretPos = lineEdit.CaretColumn;
                         lineEdit.Text = regex.Replace(lineEdit.Text, "");
                         lineEdit.CaretColumn = caretPos - (newText.Length - lineEdit.Text.Length);
                         suppressAdvanced = false;
@@ -410,7 +439,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                     {
                         if (string.IsNullOrWhiteSpace(lineEdit.Text) || string.IsNullOrWhiteSpace(newText))
                         {
-                            int caretPos = lineEdit.CaretColumn;
+                            var caretPos = lineEdit.CaretColumn;
                             lineEdit.Text = "0";
                             lineEdit.CaretColumn = caretPos - (newText.Length - lineEdit.Text.Length);
                         }
@@ -471,7 +500,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         }));
 
         // making a god damn custom restore defaults because the other one doesnt work
-        NConfigButton rawButtonControl = CreateRawButtonControl(GetBaseLibLabelText("RestoreDefaultsButton"), async () =>
+        var rawButtonControl = CreateRawButtonControl(GetBaseLibLabelText("RestoreDefaultsButton"), async void () =>
         {
             try
             {
@@ -485,7 +514,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         rawButtonControl.Name = "ResetDefaultsButton";
         rawButtonControl.CustomMinimumSize = new Vector2(360f, rawButtonControl.CustomMinimumSize.Y);
         rawButtonControl.SetColor(Color.FromHtml("#b03f3f".AsSpan()));
-        CenterContainer centerContainer = new CenterContainer();
+        var centerContainer = new CenterContainer();
         centerContainer.Name =  "ResetDefaultsButtonContainer";
         centerContainer.CustomMinimumSize = new Vector2(0.0f, 128f);
         centerContainer.AddChild(rawButtonControl);
@@ -494,7 +523,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
 
     private async Task ConfirmRestoreDefaultsSpecial(List<Action>  refreshBasicActions, List<Action> refreshAdvancedActions)
     {
-        NGenericPopup modalToCreate = NGenericPopup.Create();
+        var modalToCreate = NGenericPopup.Create();
         if (modalToCreate == null || NModalContainer.Instance == null)
             return;
         NModalContainer.Instance.Add(modalToCreate);
@@ -505,7 +534,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
 
     private void RestoreDefaultsNoConfirmSpecial(List<Action>  refreshBasicActions, List<Action> refreshAdvancedActions)
     {
-        for (int slot = 1; slot <= 3; slot++)
+        for (var slot = 1; slot <= 3; slot++)
             SaveWeights(slot, GetDefaultWeights(slot));
         foreach (var refresh in refreshBasicActions) refresh();
         foreach (var refresh in refreshAdvancedActions) refresh();
