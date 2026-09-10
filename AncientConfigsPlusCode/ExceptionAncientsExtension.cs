@@ -24,7 +24,7 @@ public static class ExceptionAncientsExtension
             MainFile.Logger.Warn($"Attempted to add {ancientModel.Title.GetFormattedText()} to Exception List multiple times.");
         }
 
-        ActSpecificAncients[ancientModel.Id] = acts.Select(act => act.Id).ToArray();
+        ActSpecificAncients[ancientModel.Id] = [.. acts.Select(act => act.Id)];
     }
     
     /// <summary>

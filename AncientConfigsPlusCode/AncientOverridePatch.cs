@@ -18,18 +18,11 @@ public class AncientOverridePatch
         if (__instance.ActNumber() > 3 || ExceptionAncientsExtension.CompleteExceptionAncients.Contains(__instance.Ancient.Id)) 
             return;
 
-        AncientEventModel ancient;
-        if (ExceptionAncientsExtension.ActSpecificAncients.Values.Any(v => v.Contains(__instance.Id)))
-        {
-            MainFile.Logger.Info("Exception rolled.");
-            ancient = __instance._rooms.Ancient = AncientConfigsPlusConfig.GetWeightedAncient(__instance, rng, RolledAncients, true);
-        }
-        else 
-            ancient = __instance._rooms.Ancient = AncientConfigsPlusConfig.GetWeightedAncient(__instance, rng, RolledAncients, false);
-        
+        var ancient = __instance._rooms.Ancient = AncientConfigsPlusConfig.AncientModelLogic(__instance, rng, RolledAncients, __instance.Ancient);
         if (AncientConfigsPlusConfig.IsMultiact(ancient))
             RolledAncients.Add(ancient);
-        if(__instance.ActNumber() == 3) RolledAncients.Clear();
+        
+        if(__instance.ActNumber() >= 3) RolledAncients.Clear();
     }
 }
 

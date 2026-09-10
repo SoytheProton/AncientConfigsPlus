@@ -90,7 +90,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         SlotProps[slot].SetValue(null, string.Join(",", entries));
     }
 
-    private static List<AncientEventModel> GetAncientsForSlot(int slot)
+    private static List<AncientEventModel> GetAncientsForSlot(int slot, ActModel? actModel = null)
     {
         var retVal  = new List<AncientEventModel>();
         ActModel act;
@@ -116,57 +116,36 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                 break;
         }
 
-        retVal.AddRange(ModelDb.AllAncients.Where(a => a is CustomAncientModel model && model.IsValidForAct(act)).ToList());
+        if (actModel != null)
+            act = actModel;
+        
+        retVal.AddRange([.. ModelDb.AllAncients.Where(a => a is CustomAncientModel model && model.IsValidForAct(act))]);
 
+        if (actModel != null)
+            return retVal;
+        
+        // if not getting specific ancient from act, then add in the exceptions (for the configs)
         foreach (var kv in ExceptionAncientsExtension.ActSpecificAncients.Where(kv => kv.Value.Any(a => ModelDb.GetById<ActModel>(a).ActNumber() == slot)))
         {
             retVal.AddRange(ModelDb.GetById<AncientEventModel>(kv.Key));
         }
-
         return retVal;
     }
 
     internal static bool IsMultiact(AncientEventModel ancient) => (GetAncientsForSlot(1).Contains(ancient) ? 1 : 0) + (GetAncientsForSlot(2).Contains(ancient) ? 1 : 0) + (GetAncientsForSlot(3).Contains(ancient) ? 1 : 0) >= 2;
 
-    public static AncientEventModel GetWeightedAncient(ActModel actModel, Rng rng, List<AncientEventModel> rolledAncients, bool isOverride)
+    public static AncientEventModel GetWeightedAncient(ActModel actModel, Rng rng, List<AncientEventModel> ancientList)
     {
         var slot = actModel.ActNumber();
-        var all = GetAncientsForSlot(slot);
-        List<AncientEventModel> filteredList = [];
-        if(!isOverride) // Override is just if its rolling an exception or not.
-        {
-            filteredList = all.Where(a => (a is CustomAncientModel model && model.IsValidForAct(actModel)) || a is not CustomAncientModel).ToList(); // Gets all Ancients that are normally able to spawn within the Act.
-        }
-        else
-        {
-            
-            foreach (var kv in ExceptionAncientsExtension.ActSpecificAncients)
-            {
-                filteredList.AddRange(from value in kv.Value where value == actModel.Id select ModelDb.GetById<AncientEventModel>(kv.Key)); // In-case of exception, tries to get all ancients that share the act to weight.
-            }
-        }
         
         var weights = ParseWeights(slot);
 
-        var weighted = filteredList
-            .Select(a => (ancient: a, weight: weights.GetValueOrDefault(a.GetType().Name, 0)))
-            .Where(x => x.weight > 0 && !rolledAncients.Contains(x.ancient))
-            .ToList();
-
-        if (weighted.Count == 0)
-        {
-            if (isOverride) // returns a non-overriding WeightedAncient call to avoid getting other exception ancients when called.
-                return GetWeightedAncient(actModel, rng, rolledAncients, false);
-            
-            // If filtered is empty, since we know this means all non-exception ancients are gone, check through unfiltered list next.
-            weighted = all.Select(a => (ancient: a, weight: weights.GetValueOrDefault(a.GetType().Name, 0)))
-                .Where(x => x.weight > 0 && !rolledAncients.Contains(x.ancient)).ToList();
-        }
+        var weighted = ancientList.Select(a => (ancient: a, weight: weights.GetValueOrDefault(a.GetType().Name, 0)))
+                .Where(x => x.weight > 0).ToList();
 
         if(weighted.Count == 0)
-            return all[rng.NextInt(all.Count)];
+            return ancientList[rng.NextInt(ancientList.Count)];
         
-
         var totalWeight = weighted.Sum(x => x.weight);
         var roll = rng.NextInt(totalWeight);
         var cumulative = 0;
@@ -177,6 +156,33 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                 return ancient;
         }
         return weighted.Last().ancient;
+    }
+    
+    public static AncientEventModel AncientModelLogic(ActModel act, Rng rng, List<AncientEventModel> rolledAncients,
+        AncientEventModel currentAncient)
+    {
+        if (act.ActNumber() > 3 || ExceptionAncientsExtension.CompleteExceptionAncients.Contains(currentAncient.Id))
+            return currentAncient;
+
+        List<AncientEventModel> ancientList = [];
+        
+        if (ExceptionAncientsExtension.ActSpecificAncients.TryGetValue(currentAncient.Id, out var actList))
+        {
+            ancientList =
+            [
+                .. from kv in ExceptionAncientsExtension.ActSpecificAncients
+                where kv.Value.Intersect(actList).Any()
+                select ModelDb.GetById<AncientEventModel>(kv.Key)
+            ];
+        }
+        else
+        {
+            ancientList = GetAncientsForSlot(act.ActNumber(), act);
+        }
+
+        ancientList.RemoveAll(a => rolledAncients.Any(ra => ra.Id == a.Id));
+
+        return GetWeightedAncient(act, rng, ancientList);
     }
 
     private static string GetAncientDisplayName(AncientEventModel ancient, int slot)
