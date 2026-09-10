@@ -16,16 +16,16 @@ public static class ExceptionAncientsExtension
     /// If you want to avoid this behavior, use <see cref="AddCompleteExceptionToAncientList"/>.
     /// </summary>
     /// <param name="ancientModel">The ancient model you are adding into the exception list.</param>
-    /// <param name="acts">The acts that this Ancient can be spawned in. Note: this will also be used to determine what other ancients are rolled when an exception is rolled.<br/>
-    /// Note that you would need to create a new instance of act without ModelDb, since Ancients are loaded before Acts</param>
-    public static void AddActSpecificAncientList(this CustomAncientModel ancientModel, ActModel[] acts)
+    /// <param name="actIds">The ModelIds of the acts that this Ancient can be spawned in. You need to use <see cref="ModelDb.GetId"/> instead of <see cref="ModelDb.Act"/> due to Ancients loading in before Acts. <br/>
+    /// Note: this will also be used to determine what other ancients are rolled when an exception is rolled. </param>
+    public static void AddActSpecificAncientList(this CustomAncientModel ancientModel, ModelId[] actIds)
     {
         if (ActSpecificAncients.ContainsKey(ancientModel.Id))
         {
             MainFile.Logger.Warn($"Attempted to add {ancientModel.Title.GetFormattedText()} to Exception List multiple times.");
         }
 
-        ActSpecificAncients[ancientModel.Id] = [.. acts.Select(act => act.Id)];
+        ActSpecificAncients[ancientModel.Id] = actIds;
     }
     
     /// <summary>
