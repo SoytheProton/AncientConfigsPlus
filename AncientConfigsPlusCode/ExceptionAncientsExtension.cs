@@ -16,7 +16,8 @@ public static class ExceptionAncientsExtension
     /// If you want to avoid this behavior, use <see cref="AddCompleteExceptionToAncientList"/>.
     /// </summary>
     /// <param name="ancientModel">The ancient model you are adding into the exception list.</param>
-    /// <param name="acts">The acts that this Ancient can be spawned in. Note: this will also be used to determine what other ancients are rolled when an exception is rolled.</param>
+    /// <param name="acts">The acts that this Ancient can be spawned in. Note: this will also be used to determine what other ancients are rolled when an exception is rolled.<br/>
+    /// Note that you would need to create a new instance of act without ModelDb, since Ancients are loaded before Acts</param>
     public static void AddActSpecificAncientList(this CustomAncientModel ancientModel, ActModel[] acts)
     {
         if (ActSpecificAncients.ContainsKey(ancientModel.Id))

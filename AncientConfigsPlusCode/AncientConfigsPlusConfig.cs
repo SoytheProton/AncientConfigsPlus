@@ -134,7 +134,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
 
     internal static bool IsMultiact(AncientEventModel ancient) => (GetAncientsForSlot(1).Contains(ancient) ? 1 : 0) + (GetAncientsForSlot(2).Contains(ancient) ? 1 : 0) + (GetAncientsForSlot(3).Contains(ancient) ? 1 : 0) >= 2;
 
-    public static AncientEventModel GetWeightedAncient(ActModel actModel, Rng rng, List<AncientEventModel> ancientList)
+    private static AncientEventModel GetWeightedAncient(ActModel actModel, Rng rng, List<AncientEventModel> ancientList)
     {
         var slot = actModel.ActNumber();
         
@@ -165,6 +165,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
             return currentAncient;
 
         List<AncientEventModel> ancientList = [];
+        var weights = ParseWeights(act.ActNumber());
         
         if (ExceptionAncientsExtension.ActSpecificAncients.TryGetValue(currentAncient.Id, out var actList))
         {
@@ -174,14 +175,19 @@ public class AncientConfigsPlusConfig : SimpleModConfig
                 where kv.Value.Intersect(actList).Any()
                 select ModelDb.GetById<AncientEventModel>(kv.Key)
             ];
+            ancientList.RemoveAll(a => weights.GetValueOrDefault(a.GetType().Name, 0) <= 0);
         }
-        else
+        if(ancientList.Count == 0)
         {
             ancientList = GetAncientsForSlot(act.ActNumber(), act);
+            ancientList.RemoveAll(a => weights.GetValueOrDefault(a.GetType().Name, 0) <= 0);
         }
 
+        if (ancientList.Count == 0)
+            ancientList = GetAncientsForSlot(act.ActNumber());
+        
         ancientList.RemoveAll(a => rolledAncients.Any(ra => ra.Id == a.Id));
-
+        
         return GetWeightedAncient(act, rng, ancientList);
     }
 
@@ -190,6 +196,10 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         var title = ancient.Title.GetFormattedText();
         if (IsMultiact(ancient) && GetAncientsForSlot(slot).Contains(ancient))
             title += " [" + new LocString("settings_ui", "ANCIENTCONFIGSPLUS-ACT"+slot+"_HEADER.title").GetFormattedText() +"]";
+        if (ExceptionAncientsExtension.ActSpecificAncients.ContainsKey(ancient.Id))
+        {
+            title += "" + new LocString("settings_ui", "ANCIENTCONFIGSPLUS-ACT_SPECIFIC_ATTACHMENT.title").GetFormattedText();
+        }
         if (ancient is CustomAncientModel)
         {
             var actAssembly = ancient.GetType().Assembly;
