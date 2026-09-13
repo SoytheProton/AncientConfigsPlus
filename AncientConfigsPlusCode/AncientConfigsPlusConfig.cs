@@ -158,7 +158,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         return weighted.Last().ancient;
     }
     
-    public static AncientEventModel AncientModelLogic(ActModel act, Rng rng, List<AncientEventModel> rolledAncients,
+    public static AncientEventModel AncientModelLogic(ActModel act, Rng rng, List<ModelId> rolledAncients,
         AncientEventModel currentAncient)
     {
         if (act.ActNumber() > 3 || ExceptionAncientsExtension.CompleteExceptionAncients.Contains(currentAncient.Id))
@@ -186,7 +186,7 @@ public class AncientConfigsPlusConfig : SimpleModConfig
         if (ancientList.Count == 0)
             ancientList = GetAncientsForSlot(act.ActNumber());
         
-        ancientList.RemoveAll(a => rolledAncients.Any(ra => ra.Id == a.Id));
+        ancientList.RemoveAll(a => rolledAncients.Contains(a.Id));
         
         return GetWeightedAncient(act, rng, ancientList);
     }

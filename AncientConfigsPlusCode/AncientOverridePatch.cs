@@ -13,7 +13,7 @@ namespace AncientConfigsPlus.AncientConfigsPlusCode;
 [HarmonyPatch(typeof (ActModel), "GenerateRooms")]
 public class AncientOverridePatch
 {
-    private static readonly List<AncientEventModel> RolledAncients = [];
+    private static readonly List<ModelId> RolledAncients = [];
     
     [HarmonyPostfix]
     private static void AddToModelPool(
@@ -30,7 +30,7 @@ public class AncientOverridePatch
 
         var ancient = __instance._rooms.Ancient = AncientConfigsPlusConfig.AncientModelLogic(__instance, rng, RolledAncients, __instance.Ancient);
         if (AncientConfigsPlusConfig.IsMultiact(ancient))
-            RolledAncients.Add(ancient);
+            RolledAncients.Add(ancient.Id);
         
         if(__instance.ActNumber() >= 3) RolledAncients.Clear();
     }
